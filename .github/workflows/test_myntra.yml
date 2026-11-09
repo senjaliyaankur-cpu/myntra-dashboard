@@ -1,0 +1,39 @@
+name: Test Myntra access
+on: workflow_dispatch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Myntra se data aa sakta hai ya nahi
+        env:
+          MYNTRA_PROXY: ${{ secrets.MYNTRA_PROXY }}
+        run: |
+          python3 - <<'PY'
+          import os, re, json, urllib.request
+          proxy = os.environ.get("MYNTRA_PROXY", "").strip()
+          handlers = [urllib.request.ProxyHandler({"http": proxy, "https": proxy})] if proxy else []
+          op = urllib.request.build_opener(*handlers)
+          H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+               "Accept": "application/json,text/html,*/*", "Accept-Language": "en-IN,en;q=0.9"}
+          def get(url):
+              try:
+                  r = op.open(urllib.request.Request(url, headers=H), timeout=25)
+                  return r.status, r.read().decode("utf-8", "replace")
+              except Exception as e:
+                  return getattr(e, "code", "ERR"), str(e)[:150]
+          print("Proxy use ho rahi hai:", bool(proxy))
+          s, b = get("https://ipinfo.io/json")
+          try:
+              j = json.loads(b); print("Server IP/desh:", j.get("ip"), j.get("country"), j.get("org"))
+          except Exception:
+              print("IP info:", s, b[:100])
+          ok = 0
+          for name, url in [("PRODUCT API", "https://www.myntra.com/gateway/v2/product/46007690"),
+                            ("PRODUCT PAGE", "https://www.myntra.com/46007690"),
+                            ("LISTING API", "https://www.myntra.com/gateway/v2/search/women-kurtas-kurtis-suits?rows=50&o=0&sort=popularity")]:
+              s, b = get(url)
+              has = bool(re.search(r'"(price|discounted|productId)"', b)) if isinstance(s, int) and s == 200 else False
+              print(f"{name}: HTTP {s}, data mila: {has}, size {len(b)}")
+              ok += has
+          print("\nRESULT:", "MYNTRA CHAL RAHA HAI" if ok else "MYNTRA BLOCK KAR RAHA HAI")
+          PY
